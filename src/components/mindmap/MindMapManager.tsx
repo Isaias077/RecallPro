@@ -25,7 +25,7 @@ import {
   Divider,
 } from '@mui/material';
 import {
-  Add as AddIcon,
+  // Add as AddIcon, // Unused import
   Edit as EditIcon,
   Delete as DeleteIcon,
   Folder as FolderIcon,
@@ -132,12 +132,12 @@ export default function MindMapManager() {
     );
   });
 
-  // Handle opening the create mind map dialog
-  const handleOpenCreateMindMapDialog = () => {
-    setIsEditingMindMap(false);
-    setMindMapFormData({ name: '', description: '', folderId: null });
-    setOpenMindMapDialog(true);
-  };
+  // Commented out unused function
+  // const handleOpenCreateMindMapDialog = () => {
+  //   setIsEditingMindMap(false);
+  //   setMindMapFormData({ name: '', description: '', folderId: null });
+  //   setOpenMindMapDialog(true);
+  // };
 
   // Handle opening the edit mind map dialog
   const handleOpenEditMindMapDialog = (mindMap: any) => {

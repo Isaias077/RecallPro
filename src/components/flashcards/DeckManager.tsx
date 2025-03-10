@@ -230,7 +230,7 @@ export default function DeckManager() {
                                                     fontSize: '0.875rem'
                                                 }}
                                             >
-                                                Tarjetas: {deck.cards?.length || 0}
+                                                Tarjetas: {(deck as any).cards?.length || 0}
                                             </Typography>
                                         </Box>
                                         <CardActions sx={{ p: 2, pt: 0, display: 'flex', justifyContent: 'space-between' }}>

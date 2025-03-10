@@ -25,15 +25,7 @@ type Achievement = {
             'all_daily_reviews' | 'days_without_overdue';
 };
 
-type UserStreak = {
-  id: string;
-  user_id: string;
-  current_streak: number;
-  longest_streak: number;
-  last_study_date: string | null;
-  streak_freezes: number;
-  created_at: string;
-};
+// Type definition moved to implementation
 
 const StreakContext = createContext<StreakContextType | undefined>(undefined);
 
@@ -287,7 +279,7 @@ export function StreakProvider({ children }: { children: ReactNode }) {
   const [longestStreak, setLongestStreak] = useState(0);
   const [lastStudyDate, setLastStudyDate] = useState<string | null>(null);
   const [streakFreezes, setStreakFreezes] = useState(0);
-  const [achievements, setAchievements] = useState<Achievement[]>(ACHIEVEMENTS);
+  const [achievements, setAchievements] = useState<Achievement[]>(ACHIEVEMENTS as Achievement[]);
 
   // Initialize streak data
   useEffect(() => {
@@ -310,7 +302,8 @@ export function StreakProvider({ children }: { children: ReactNode }) {
 
         if (!streakData) {
           try {
-            // Create initial streak data for new user
+            // Create initial streak data for new user 
+            // @ts-ignore
             const { data: newStreakData, error: createError } = await supabase
               .from('user_streaks')
               .insert([

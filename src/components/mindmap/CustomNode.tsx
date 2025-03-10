@@ -1,4 +1,4 @@
-import React, { useState, useEffect, memo } from 'react';
+import { memo } from 'react';
 import { Handle, Position, NodeProps } from 'reactflow';
 import { Box, Typography } from '@mui/material';
 

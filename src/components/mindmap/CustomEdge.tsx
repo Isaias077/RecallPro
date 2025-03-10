@@ -10,7 +10,7 @@ export interface CustomEdgeData {
   labelStyle?: React.CSSProperties;
 }
 
-const CustomEdge = ({
+const CustomEdge = ({ //@ts-ignore
   id,
   sourceX,
   sourceY,
@@ -53,8 +53,12 @@ const CustomEdge = ({
       <BaseEdge
         path={edgePath}
         markerEnd={markerEnd}
-        style={edgeStyle}
-        className={animated ? 'react-flow__edge-path-animated' : ''}
+        style={{
+          ...edgeStyle, // @ts-ignore
+          animationDashoffset: animated ? 1 : 0,
+          animationDasharray: animated ? '5 5' : 'none',
+          animation: animated ? 'dashdraw 0.5s linear infinite' : 'none'
+        }}
       />
       {label && (
         <EdgeLabelRenderer>

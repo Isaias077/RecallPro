@@ -30,7 +30,6 @@ import {
   Logout as LogoutIcon,
   Login as LoginIcon,
   PersonAdd as PersonAddIcon,
-  Map as MapIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 
