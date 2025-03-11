@@ -1,5 +1,8 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { supabase, Deck, Flashcard } from '../lib/supabase';
+import { Deck, Flashcard } from '../lib/supabase';
+import { ServiceFactory } from '../services/ServiceFactory';
+import { IFlashcardService } from '../services/interfaces/IFlashcardService';
+import { useAuth } from './AuthContext';
 
 type FlashcardContextType = {
   // Decks
@@ -28,40 +31,24 @@ type FlashcardContextType = {
 
 const FlashcardContext = createContext<FlashcardContextType | undefined>(undefined);
 
-// Helper function to calculate next review date based on difficulty
-const calculateNextReviewDate = (difficulty: 'easy' | 'medium' | 'hard'): string => {
-  const now = new Date();
-  let daysToAdd = 1; // Default (hard)
-  
-  if (difficulty === 'medium') {
-    daysToAdd = 3;
-  } else if (difficulty === 'easy') {
-    daysToAdd = 7;
-  }
-  
-  now.setDate(now.getDate() + daysToAdd);
-  return now.toISOString();
-};
-
 export function FlashcardProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const [decks, setDecks] = useState<Deck[]>([]);
   const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
   const [loadingDecks, setLoadingDecks] = useState(true);
   const [loadingFlashcards, setLoadingFlashcards] = useState(true);
   const [currentDeckId, setCurrentDeckId] = useState<string | null>(null);
 
+  // Get the flashcard service from the ServiceFactory
+  const flashcardService: IFlashcardService = ServiceFactory.getInstance().getFlashcardService();
+
   // Fetch user's decks on mount
   useEffect(() => {
     const fetchDecks = async () => {
+      if (!user) return;
+      
       try {
-        const { data: session } = await supabase.auth.getSession();
-        if (!session.session?.user) return;
-
-        const { data, error } = await supabase
-          .from('decks')
-          .select('*')
-          .eq('user_id', session.session.user.id)
-          .order('created_at', { ascending: false });
+        const { data, error } = await flashcardService.getDecks();
 
         if (error) throw error;
         setDecks(data || []);
@@ -73,7 +60,7 @@ export function FlashcardProvider({ children }: { children: ReactNode }) {
     };
 
     fetchDecks();
-  }, []);
+  }, [user]);
 
   // Fetch flashcards when currentDeckId changes
   useEffect(() => {
@@ -86,11 +73,7 @@ export function FlashcardProvider({ children }: { children: ReactNode }) {
 
       setLoadingFlashcards(true);
       try {
-        const { data, error } = await supabase
-          .from('flashcards')
-          .select('*')
-          .eq('deck_id', currentDeckId)
-          .order('created_at', { ascending: false });
+        const { data, error } = await flashcardService.getFlashcards(currentDeckId);
 
         if (error) throw error;
         setFlashcards(data || []);
@@ -107,25 +90,14 @@ export function FlashcardProvider({ children }: { children: ReactNode }) {
   // Deck CRUD operations
   const createDeck = async (name: string, description: string): Promise<Deck | null> => {
     try {
-      const { data: session } = await supabase.auth.getSession();
-      if (!session.session?.user) return null;
-
-      const { data, error } = await supabase
-        .from('decks')
-        .insert([
-          {
-            name,
-            description,
-            user_id: session.session.user.id,
-          },
-        ])
-        .select()
-        .single();
+      const { data, error } = await flashcardService.createDeck(name, description);
 
       if (error) throw error;
       
       // Update local state
-      setDecks((prevDecks) => [data, ...prevDecks]);
+      if (data) {
+        setDecks((prevDecks) => [data, ...prevDecks]);
+      }
       return data;
     } catch (error) {
       console.error('Error creating deck:', error);
@@ -135,19 +107,16 @@ export function FlashcardProvider({ children }: { children: ReactNode }) {
 
   const updateDeck = async (id: string, name: string, description: string): Promise<Deck | null> => {
     try {
-      const { data, error } = await supabase
-        .from('decks')
-        .update({ name, description })
-        .eq('id', id)
-        .select()
-        .single();
+      const { data, error } = await flashcardService.updateDeck(id, name, description);
 
       if (error) throw error;
       
       // Update local state
-      setDecks((prevDecks) =>
-        prevDecks.map((deck) => (deck.id === id ? data : deck))
-      );
+      if (data) {
+        setDecks((prevDecks) =>
+          prevDecks.map((deck) => (deck.id === id ? data : deck))
+        );
+      }
       
       return data;
     } catch (error) {
@@ -158,7 +127,7 @@ export function FlashcardProvider({ children }: { children: ReactNode }) {
 
   const deleteDeck = async (id: string): Promise<void> => {
     try {
-      const { error } = await supabase.from('decks').delete().eq('id', id);
+      const { error } = await flashcardService.deleteDeck(id);
       if (error) throw error;
       
       // Update local state
@@ -182,30 +151,18 @@ export function FlashcardProvider({ children }: { children: ReactNode }) {
     mediaType?: 'image' | 'audio' | 'video'
   ): Promise<Flashcard | null> => {
     try {
-      const hasMedia = !!mediaUrl;
-      
-      const { data, error } = await supabase
-        .from('flashcards')
-        .insert([
-          {
-            deck_id: deckId,
-            question,
-            answer,
-            review_count: 0,
-            success_rate: 0,
-            difficulty: 'medium',
-            has_media: hasMedia,
-            media_url: mediaUrl,
-            media_type: mediaType,
-          },
-        ])
-        .select()
-        .single();
+      const { data, error } = await flashcardService.createFlashcard(
+        deckId,
+        question,
+        answer,
+        mediaUrl,
+        mediaType
+      );
 
       if (error) throw error;
       
       // Update local state if the created flashcard belongs to the current deck
-      if (deckId === currentDeckId) {
+      if (data && deckId === currentDeckId) {
         setFlashcards((prevFlashcards) => [data, ...prevFlashcards]);
       }
       
@@ -224,27 +181,22 @@ export function FlashcardProvider({ children }: { children: ReactNode }) {
     mediaType?: 'image' | 'audio' | 'video'
   ): Promise<Flashcard | null> => {
     try {
-      const hasMedia = !!mediaUrl;
-      
-      const { data, error } = await supabase
-        .from('flashcards')
-        .update({
-          question,
-          answer,
-          has_media: hasMedia,
-          media_url: mediaUrl,
-          media_type: mediaType,
-        })
-        .eq('id', id)
-        .select()
-        .single();
+      const { data, error } = await flashcardService.updateFlashcard(
+        id,
+        question,
+        answer,
+        mediaUrl,
+        mediaType
+      );
 
       if (error) throw error;
       
       // Update local state
-      setFlashcards((prevFlashcards) =>
-        prevFlashcards.map((flashcard) => (flashcard.id === id ? data : flashcard))
-      );
+      if (data) {
+        setFlashcards((prevFlashcards) =>
+          prevFlashcards.map((flashcard) => (flashcard.id === id ? data : flashcard))
+        );
+      }
       
       return data;
     } catch (error) {
@@ -255,7 +207,7 @@ export function FlashcardProvider({ children }: { children: ReactNode }) {
 
   const deleteFlashcard = async (id: string): Promise<void> => {
     try {
-      const { error } = await supabase.from('flashcards').delete().eq('id', id);
+      const { error } = await flashcardService.deleteFlashcard(id);
       if (error) throw error;
       
       // Update local state
@@ -268,39 +220,16 @@ export function FlashcardProvider({ children }: { children: ReactNode }) {
   // Study and Spaced Repetition functions
   const reviewFlashcard = async (id: string, difficulty: 'easy' | 'medium' | 'hard'): Promise<void> => {
     try {
-      // Get the current flashcard to update its review stats
-      const flashcard = flashcards.find((f) => f.id === id);
-      if (!flashcard) return;
-
-      const now = new Date().toISOString();
-      const nextReviewDate = calculateNextReviewDate(difficulty);
-      const newReviewCount = (flashcard.review_count || 0) + 1;
-      
-      // Calculate new success rate based on difficulty
-      // Easy and Medium are considered successful reviews
-      const isSuccessful = difficulty === 'easy' || difficulty === 'medium';
-      const successCount = isSuccessful ? 1 : 0;
-      const newSuccessRate = ((flashcard.success_rate || 0) * (newReviewCount - 1) + successCount) / newReviewCount;
-
-      const { data, error } = await supabase
-        .from('flashcards')
-        .update({
-          last_reviewed_at: now,
-          next_review_date: nextReviewDate,
-          review_count: newReviewCount,
-          success_rate: newSuccessRate,
-          difficulty,
-        })
-        .eq('id', id)
-        .select()
-        .single();
+      const { data, error } = await flashcardService.reviewFlashcard(id, difficulty);
 
       if (error) throw error;
       
       // Update local state
-      setFlashcards((prevFlashcards) =>
-        prevFlashcards.map((flashcard) => (flashcard.id === id ? data : flashcard))
-      );
+      if (data) {
+        setFlashcards((prevFlashcards) =>
+          prevFlashcards.map((flashcard) => (flashcard.id === id ? data : flashcard))
+        );
+      }
     } catch (error) {
       console.error('Error reviewing flashcard:', error);
     }
@@ -308,18 +237,7 @@ export function FlashcardProvider({ children }: { children: ReactNode }) {
 
   const getDueFlashcards = async (deckId?: string): Promise<Flashcard[]> => {
     try {
-      const today = new Date().toISOString();
-      let query = supabase
-        .from('flashcards')
-        .select('*')
-        .or(`next_review_date.lte.${today},next_review_date.is.null`);
-
-      // Filter by deck if deckId is provided
-      if (deckId) {
-        query = query.eq('deck_id', deckId);
-      }
-
-      const { data, error } = await query;
+      const { data, error } = await flashcardService.getDueFlashcards(deckId);
 
       if (error) throw error;
       return data || [];
@@ -332,13 +250,7 @@ export function FlashcardProvider({ children }: { children: ReactNode }) {
   // Get all flashcards from all decks for arcade mode
   const getAllFlashcards = async (): Promise<Flashcard[]> => {
     try {
-      const { data: session } = await supabase.auth.getSession();
-      if (!session.session?.user) return [];
-
-      const { data, error } = await supabase
-        .from('flashcards')
-        .select('*, decks!inner(*)')
-        .eq('decks.user_id', session.session.user.id);
+      const { data, error } = await flashcardService.getAllFlashcards();
 
       if (error) throw error;
       return data || [];
@@ -365,7 +277,7 @@ export function FlashcardProvider({ children }: { children: ReactNode }) {
         getDueFlashcards,
         getCurrentDeckId: () => currentDeckId,
         setCurrentDeckId,
-        getAllFlashcards, // Add the new function to the context
+        getAllFlashcards,
       }}
     >
       {children}

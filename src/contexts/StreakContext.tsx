@@ -1,5 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { supabase } from '../lib/supabase';
+import { ServiceFactory } from '../services/ServiceFactory';
+import { IStreakService, Achievement } from '../services/interfaces/IStreakService';
+import { useAuth } from './AuthContext';
 
 type StreakContextType = {
   currentStreak: number;
@@ -12,25 +14,10 @@ type StreakContextType = {
   earnStreakFreeze: () => Promise<void>;
 };
 
-type Achievement = {
-  id: string;
-  name: string;
-  description: string;
-  unlocked: boolean;
-  milestone: number;
-  category: 'progress' | 'streak' | 'knowledge' | 'precision' | 'study_time' | 'consistency';
-  condition: 'sessions' | 'cards_per_day' | 'total_cards' | 'consecutive_days' | 'streak_days' | 
-            'decks_created' | 'cards_created' | 'session_accuracy' | 'monthly_accuracy' | 
-            'session_minutes' | 'daily_minutes' | 'total_minutes' | 'on_time_reviews' | 
-            'all_daily_reviews' | 'days_without_overdue';
-};
-
-// Type definition moved to implementation
-
 const StreakContext = createContext<StreakContextType | undefined>(undefined);
 
 // Helper function to check if a date is today
-const isToday = (date: string) => {
+export const isToday = (date: string) => {
   const today = new Date();
   const compareDate = new Date(date);
   return (
@@ -41,7 +28,7 @@ const isToday = (date: string) => {
 };
 
 // Helper function to check if a date is yesterday
-const isYesterday = (date: string) => {
+export const isYesterday = (date: string) => {
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   const compareDate = new Date(date);
@@ -53,7 +40,7 @@ const isYesterday = (date: string) => {
 };
 
 // Predefined achievements
-const ACHIEVEMENTS = [
+export const ACHIEVEMENTS = [
   // Progress Achievements 🎯
   {
     id: 'first-step',
@@ -275,98 +262,31 @@ const ACHIEVEMENTS = [
 ];
 
 export function StreakProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const [currentStreak, setCurrentStreak] = useState(0);
   const [longestStreak, setLongestStreak] = useState(0);
   const [lastStudyDate, setLastStudyDate] = useState<string | null>(null);
   const [streakFreezes, setStreakFreezes] = useState(0);
-  const [achievements, setAchievements] = useState<Achievement[]>(ACHIEVEMENTS as Achievement[]);
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
+
+  // Get the streak service from the ServiceFactory
+  const streakService: IStreakService = ServiceFactory.getInstance().getStreakService();
 
   // Initialize streak data
   useEffect(() => {
     const initializeStreak = async () => {
+      if (!user) return;
+      
       try {
-        const { data: session } = await supabase.auth.getSession();
-        if (!session.session?.user) return;
+        const { data, error } = await streakService.getStreakData();
 
-        // Check if user has streak data
-        const { data: streakData, error } = await supabase
-          .from('user_streaks')
-          .select('*')
-          .eq('user_id', session.session.user.id)
-          .single();
-
-        if (error && error.code !== 'PGRST116') {
-          console.error('Error fetching streak data:', error);
-          return;
-        }
-
-        if (!streakData) {
-          try {
-            // Create initial streak data for new user 
-            // @ts-ignore
-            const { data: newStreakData, error: createError } = await supabase
-              .from('user_streaks')
-              .insert([
-                {
-                  user_id: session.session.user.id,
-                  current_streak: 0,
-                  longest_streak: 0,
-                  streak_freezes: 1, // Start with one free streak freeze
-                },
-              ])
-              .select()
-              .single();
-
-            if (createError) throw createError;
-            
-            setCurrentStreak(0);
-            setLongestStreak(0);
-            setLastStudyDate(null);
-            setStreakFreezes(1);
-          } catch (insertError: any) {
-            // If we get a duplicate key error, the record already exists
-            // This can happen due to race conditions or multiple tabs
-            if (insertError.code === '23505') {
-              // Fetch the existing record
-              const { data: existingData, error: fetchError } = await supabase
-                .from('user_streaks')
-                .select('*')
-                .eq('user_id', session.session.user.id)
-                .single();
-              
-              if (fetchError) throw fetchError;
-              
-              // Update state with existing data
-              setCurrentStreak(existingData.current_streak);
-              setLongestStreak(existingData.longest_streak);
-              setLastStudyDate(existingData.last_study_date);
-              setStreakFreezes(existingData.streak_freezes);
-              
-              // Update achievements based on longest streak
-              setAchievements(prev =>
-                prev.map(achievement => ({
-                  ...achievement,
-                  unlocked: existingData.longest_streak >= achievement.milestone,
-                }))
-              );
-            } else {
-              // If it's not a duplicate key error, rethrow
-              throw insertError;
-            }
-          }
-        } else {
-          setCurrentStreak(streakData.current_streak);
-          setLongestStreak(streakData.longest_streak);
-          setLastStudyDate(streakData.last_study_date);
-          setStreakFreezes(streakData.streak_freezes);
-
-          // Update achievements based on longest streak
-          setAchievements(prev =>
-            prev.map(achievement => ({
-              ...achievement,
-              unlocked: streakData.longest_streak >= achievement.milestone,
-            }))
-          );
+        if (error) throw error;
+        if (data) {
+          setCurrentStreak(data.currentStreak);
+          setLongestStreak(data.longestStreak);
+          setLastStudyDate(data.lastStudyDate);
+          setStreakFreezes(data.streakFreezes);
+          setAchievements(data.achievements);
         }
       } catch (error) {
         console.error('Error initializing streak:', error);
@@ -374,107 +294,37 @@ export function StreakProvider({ children }: { children: ReactNode }) {
     };
 
     initializeStreak();
-  }, []);
+  }, [user]);
 
   // Update streak when user completes a study session
   const updateStreak = async () => {
     try {
-      const { data: session } = await supabase.auth.getSession();
-      if (!session.session?.user) return;
-
-      const now = new Date().toISOString();
-      let newCurrentStreak = currentStreak;
-      let newLongestStreak = longestStreak;
-
-      if (lastStudyDate && isToday(lastStudyDate)) {
-        // Already studied today, just update the last_study_date
-        const { error } = await supabase
-          .from('user_streaks')
-          .update({
-            last_study_date: now,
-          })
-          .eq('user_id', session.session.user.id);
-
-        if (error) throw error;
-        setLastStudyDate(now);
-        return;
-      } else if (!lastStudyDate || lastStudyDate === null) {
-        // First time studying, set streak to 1
-        newCurrentStreak = 1;
-      } else if (isYesterday(lastStudyDate)) {
-        // Studied yesterday, increment streak
-        newCurrentStreak += 1;
-      } else {
-        // Streak broken, check if streak freeze is available
-        if (streakFreezes > 0) {
-          // Use streak freeze
-          newCurrentStreak += 1;
-          await useStreakFreeze();
-        } else {
-          // Reset streak
-          newCurrentStreak = 1;
-        }
-      }
-
-      // Update longest streak if current streak is longer
-      if (newCurrentStreak > newLongestStreak) {
-        newLongestStreak = newCurrentStreak;
-      }
-
-      // Update database
-      const { error } = await supabase
-        .from('user_streaks')
-        .update({
-          current_streak: newCurrentStreak,
-          longest_streak: newLongestStreak,
-          last_study_date: now,
-        })
-        .eq('user_id', session.session.user.id);
+      if (!user) return;
+      
+      const { data, error } = await streakService.updateStreak();
 
       if (error) throw error;
-
-      // Update local state
-      setCurrentStreak(newCurrentStreak);
-      setLongestStreak(newLongestStreak);
-      setLastStudyDate(now);
-
-      // Check for new achievements based on their category and condition
-      setAchievements(prev =>
-        prev.map(achievement => {
-          let unlocked = achievement.unlocked;
-          
-          // Only process achievements that aren't already unlocked
-          if (!unlocked) {
-            switch (achievement.category) {
-              case 'streak':
-                if (achievement.condition === 'streak_days' && newCurrentStreak >= achievement.milestone) {
-                  unlocked = true;
-                }
-                break;
-              
-              case 'progress':
-                if (achievement.condition === 'sessions') {
-                  // First session achievement
-                  unlocked = true; // Unlock on first session
-                }
-                // Other progress achievements would need additional tracking
-                break;
-              
-              // Other categories would need additional data tracking
-              // This is a placeholder for future implementation
-            }
-          }
-          
-          return {
-            ...achievement,
-            unlocked,
-          };
-        })
-      );
-
-      // Award streak freeze at certain milestones
-      if (newCurrentStreak === 7 || newCurrentStreak === 30) {
-        await earnStreakFreeze();
+      if (data) {
+        setCurrentStreak(data.currentStreak);
+        // Update longest streak if needed
+        if (data.currentStreak > longestStreak) {
+          setLongestStreak(data.currentStreak);
+        }
+        setLastStudyDate(new Date().toISOString());
+        
+        // Check for new achievements
+        if (data.newAchievements && data.newAchievements.length > 0) {
+          setAchievements(prevAchievements => {
+            // Update unlocked status for achievements
+            return prevAchievements.map(achievement => {
+              const newAchievement = data.newAchievements.find(a => a.id === achievement.id);
+              if (newAchievement) {
+                return { ...achievement, unlocked: true };
+              }
+              return achievement;
+            });
+          });
+        }
       }
     } catch (error) {
       console.error('Error updating streak:', error);
@@ -484,22 +334,16 @@ export function StreakProvider({ children }: { children: ReactNode }) {
   // Use a streak freeze
   const useStreakFreeze = async () => {
     try {
-      const { data: session } = await supabase.auth.getSession();
-      if (!session.session?.user) return false;
+      if (!user || streakFreezes <= 0) return false;
 
-      if (streakFreezes <= 0) return false;
-
-      const { error } = await supabase
-        .from('user_streaks')
-        .update({
-          streak_freezes: streakFreezes - 1,
-        })
-        .eq('user_id', session.session.user.id);
+      const { data, error } = await streakService.useStreakFreeze();
 
       if (error) throw error;
-
-      setStreakFreezes(prev => prev - 1);
-      return true;
+      if (data && data.success) {
+        setStreakFreezes(prev => prev - 1);
+        return true;
+      }
+      return false;
     } catch (error) {
       console.error('Error using streak freeze:', error);
       return false;
@@ -509,19 +353,14 @@ export function StreakProvider({ children }: { children: ReactNode }) {
   // Earn a streak freeze
   const earnStreakFreeze = async () => {
     try {
-      const { data: session } = await supabase.auth.getSession();
-      if (!session.session?.user) return;
+      if (!user) return;
 
-      const { error } = await supabase
-        .from('user_streaks')
-        .update({
-          streak_freezes: streakFreezes + 1,
-        })
-        .eq('user_id', session.session.user.id);
+      const { data, error } = await streakService.earnStreakFreeze();
 
       if (error) throw error;
-
-      setStreakFreezes(prev => prev + 1);
+      if (data && data.success) {
+        setStreakFreezes(prev => prev + 1);
+      }
     } catch (error) {
       console.error('Error earning streak freeze:', error);
     }

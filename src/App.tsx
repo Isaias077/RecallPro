@@ -3,19 +3,19 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { FlashcardProvider } from './contexts/FlashcardContext';
 import { StreakProvider } from './contexts/StreakContext';
 import { MindMapProvider } from './contexts/MindMapContext';
-import { Box, CircularProgress, Container, CssBaseline, ThemeProvider, createTheme, Typography } from '@mui/material';
+import { Box, CircularProgress, Container, CssBaseline, ThemeProvider, createTheme } from '@mui/material';
 import Navigation from './components/layout/Navigation';
-import LoginForm from './components/auth/LoginForm';
-import SignupForm from './components/auth/SignupForm';
+import Typography from './components/atoms/Typography';
+import Button from './components/atoms/Button';
+import Card from './components/atoms/Card';
 import DeckManager from './components/flashcards/DeckManager';
 import FlashcardManager from './components/flashcards/FlashcardManager';
-import StudySession from './components/flashcards/StudySession';
-import ArcadeMode from './components/flashcards/ArcadeMode';
+import ArcadePage from './components/pages/ArcadePage';
 import PomodoroTimer from './components/pomodoro/PomodoroTimer';
 import QuizPage from './components/flashcards/QuizPage';
-import MindMapManager from './components/mindmap/MindMapManager';
 import MindMapEditor from './components/mindmap/MindMapEditor';
 import './App.css';
+import { DashboardPage, LoginPage, MindMapPage, SignupPage, StudySessionPage } from './components/pages';
 
 // Create a theme instance
 const theme = createTheme({
@@ -69,16 +69,106 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 
 // Home page component
 const HomePage = () => (
-  <Box textAlign="center" py={4}>
-    <Typography variant="h4" component="h1" gutterBottom>
-      Welcome to CardsPro
-    </Typography>
-    <Typography variant="h6" gutterBottom>
-      Your Flashcard Learning System with Spaced Repetition
-    </Typography>
-    <Typography variant="body1" paragraph>
-      Create flashcards, organize them into decks, and study efficiently with our spaced repetition system.
-    </Typography>
+  <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    {/* Hero Section */}
+    <Box
+      sx={{
+        background: 'linear-gradient(45deg, #2196F3 30%, #21CBF3 90%)',
+        color: 'white',
+        py: 8,
+        textAlign: 'center',
+      }}
+    >
+      <Container maxWidth="md">
+        <Typography variant="h2" component="h1" gutterBottom fontWeight="bold">
+          Potencia tu Aprendizaje con RecallPro
+        </Typography>
+        <Typography variant="h5" gutterBottom sx={{ mb: 4 }}>
+          Sistema de aprendizaje inteligente con repetición espaciada, mapas mentales y más
+        </Typography>
+        <Box sx={{ mt: 4 }}>
+          <Button
+            variant="contained"
+            color="secondary"
+            size="large"
+            href="/signup"
+            sx={{ mr: 2, backgroundColor: 'white', color: '#2196F3' }}
+          >
+            Comenzar Gratis
+          </Button>
+          <Button
+            variant="outlined"
+            size="large"
+            href="/login"
+            sx={{ color: 'white', borderColor: 'white' }}
+          >
+            Iniciar Sesión
+          </Button>
+        </Box>
+      </Container>
+    </Box>
+
+    {/* Features Section */}
+    <Box sx={{ py: 8, backgroundColor: '#f5f5f5' }}>
+      <Container maxWidth="lg">
+        <Typography variant="h3" component="h2" gutterBottom textAlign="center" sx={{ mb: 6 }}>
+          Características Principales
+        </Typography>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' },
+            gap: 4,
+          }}
+        >
+          <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: 3 }}>
+            <Typography variant="h5" component="h3" gutterBottom color="primary">
+              Flashcards Inteligentes
+            </Typography>
+            <Typography variant="body1">
+              Crea y organiza tus tarjetas de estudio con nuestro sistema de repetición espaciada para un aprendizaje óptimo.
+            </Typography>
+          </Card>
+          <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: 3 }}>
+            <Typography variant="h5" component="h3" gutterBottom color="primary">
+              Mapas Mentales
+            </Typography>
+            <Typography variant="body1">
+              Visualiza y conecta conceptos con nuestro editor de mapas mentales interactivo.
+            </Typography>
+          </Card>
+          <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: 3 }}>
+            <Typography variant="h5" component="h3" gutterBottom color="primary">
+              Temporizador Pomodoro
+            </Typography>
+            <Typography variant="body1">
+              Mejora tu concentración y productividad con nuestro temporizador Pomodoro integrado.
+            </Typography>
+          </Card>
+        </Box>
+      </Container>
+    </Box>
+
+    {/* Call to Action Section */}
+    <Box sx={{ py: 8, textAlign: 'center', backgroundColor: '#e0e0e0' }}>
+      <Container maxWidth="md">
+        <Typography variant="h4" component="h2" gutterBottom>
+          Comienza tu Viaje de Aprendizaje Hoy
+        </Typography>
+        <Typography variant="body1" sx={{ mb: 4 }}>
+          Únete a nuestra comunidad de estudiantes y profesionales que ya están mejorando su forma de aprender.
+        </Typography>
+        <Button
+          variant="contained"
+          color="primary"
+          size="large"
+          href="/signup"
+          sx={{ backgroundColor: '#2196F3', color: 'white' }}
+        >
+          Crear Cuenta Gratuita
+        </Button>
+      </Container>
+    </Box>
   </Box>
 );
 
@@ -118,7 +208,7 @@ function App() {
                   path="/login"
                   element={
                     <PublicRoute>
-                      <LoginForm />
+                      <LoginPage />
                     </PublicRoute>
                   }
                 />
@@ -126,7 +216,7 @@ function App() {
                   path="/signup"
                   element={
                     <PublicRoute>
-                      <SignupForm />
+                      <SignupPage />
                     </PublicRoute>
                   }
                 />
@@ -136,7 +226,7 @@ function App() {
                   path="/dashboard"
                   element={
                     <ProtectedRoute>
-                      <Dashboard />
+                      <DashboardPage />
                     </ProtectedRoute>
                   }
                 />
@@ -160,7 +250,7 @@ function App() {
                   path="/study/:deckId"
                   element={
                     <ProtectedRoute>
-                      <StudySession />
+                      <StudySessionPage />
                     </ProtectedRoute>
                   }
                 />
@@ -176,7 +266,7 @@ function App() {
                   path="/arcade"
                   element={
                     <ProtectedRoute>
-                      <ArcadeMode />
+                      <ArcadePage />
                     </ProtectedRoute>
                   }
                 />
@@ -192,7 +282,7 @@ function App() {
                   path="/mindmap"
                   element={
                     <ProtectedRoute>
-                      <MindMapManager />
+                      <MindMapPage />
                     </ProtectedRoute>
                   }
                 />

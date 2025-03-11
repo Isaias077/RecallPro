@@ -1,46 +1,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { supabase } from '../lib/supabase';
 import { useAuth } from './AuthContext';
-
-// Define types for mind map data
-type Node = {
-  id: string;
-  type: string;
-  position: { x: number; y: number };
-  data: { 
-    label: string;
-    color?: string;
-    icon?: string;
-  };
-};
-
-type Edge = {
-  id: string;
-  source: string;
-  target: string;
-  type?: string;
-  animated?: boolean;
-  style?: object;
-};
-
-type MindMap = {
-  id: string;
-  name: string;
-  description: string;
-  created_at: string;
-  updated_at: string;
-  nodes: Node[];
-  edges: Edge[];
-  tags?: string[];
-  folder_id?: string | null;
-};
-
-type Folder = {
-  id: string;
-  name: string;
-  description?: string;
-  created_at: string;
-};
+import { ServiceFactory } from '../services/ServiceFactory';
+import { IMindMapService, MindMap, Node, Edge, Folder } from '../services/interfaces/IMindMapService';
 
 type MindMapContextType = {
   mindMaps: MindMap[];
@@ -74,6 +35,9 @@ export function MindMapProvider({ children }: { children: ReactNode }) {
   const [loadingFolders, setLoadingFolders] = useState(true);
   const [currentMindMapId, setCurrentMindMapId] = useState<string | null>(null);
 
+  // Get the mind map service from the ServiceFactory
+  const mindMapService: IMindMapService = ServiceFactory.getInstance().getMindMapService();
+
   // Fetch mind maps when user changes
   useEffect(() => {
     if (user) {
@@ -87,17 +51,13 @@ export function MindMapProvider({ children }: { children: ReactNode }) {
     }
   }, [user]);
 
-  // Fetch mind maps from Supabase
+  // Fetch mind maps from service
   const fetchMindMaps = async () => {
     try {
       setLoadingMindMaps(true);
-      const { data, error } = await supabase
-        .from('mind_maps')
-        .select('*')
-        .eq('user_id', user?.id);
+      const { data, error } = await mindMapService.getMindMaps();
 
       if (error) throw error;
-
       setMindMaps(data || []);
     } catch (error) {
       console.error('Error fetching mind maps:', error);
@@ -106,17 +66,13 @@ export function MindMapProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Fetch folders from Supabase
+  // Fetch folders from service
   const fetchFolders = async () => {
     try {
       setLoadingFolders(true);
-      const { data, error } = await supabase
-        .from('mind_map_folders')
-        .select('*')
-        .eq('user_id', user?.id);
+      const { data, error } = await mindMapService.getFolders();
 
       if (error) throw error;
-
       setFolders(data || []);
     } catch (error) {
       console.error('Error fetching folders:', error);
@@ -128,25 +84,12 @@ export function MindMapProvider({ children }: { children: ReactNode }) {
   // Create a new mind map
   const createMindMap = async (name: string, description: string, folderId?: string) => {
     try {
-      const newMindMap = {
-        user_id: user?.id,
-        name,
-        description,
-        folder_id: folderId || null,
-        nodes: [],
-        edges: [],
-        tags: [],
-      };
-
-      const { data, error } = await supabase
-        .from('mind_maps')
-        .insert([newMindMap])
-        .select()
-        .single();
+      const { data, error } = await mindMapService.createMindMap(name, description, folderId);
 
       if (error) throw error;
-
-      setMindMaps([...mindMaps, data]);
+      if (data) {
+        setMindMaps([...mindMaps, data]);
+      }
       return data;
     } catch (error) {
       console.error('Error creating mind map:', error);
@@ -164,18 +107,7 @@ export function MindMapProvider({ children }: { children: ReactNode }) {
     tags?: string[]
   ) => {
     try {
-      const { error } = await supabase
-        .from('mind_maps')
-        .update({
-          name,
-          description,
-          nodes,
-          edges,
-          tags,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', id)
-        .eq('user_id', user?.id);
+      const { error } = await mindMapService.updateMindMap(id, name, description, nodes, edges, tags);
 
       if (error) throw error;
 
@@ -206,11 +138,7 @@ export function MindMapProvider({ children }: { children: ReactNode }) {
   // Delete a mind map
   const deleteMindMap = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('mind_maps')
-        .delete()
-        .eq('id', id)
-        .eq('user_id', user?.id);
+      const { error } = await mindMapService.deleteMindMap(id);
 
       if (error) throw error;
 
@@ -227,21 +155,12 @@ export function MindMapProvider({ children }: { children: ReactNode }) {
   // Create a new folder
   const createFolder = async (name: string, description?: string) => {
     try {
-      const newFolder = {
-        user_id: user?.id,
-        name,
-        description: description || '',
-      };
-
-      const { data, error } = await supabase
-        .from('mind_map_folders')
-        .insert([newFolder])
-        .select()
-        .single();
+      const { data, error } = await mindMapService.createFolder(name, description);
 
       if (error) throw error;
-
-      setFolders([...folders, data]);
+      if (data) {
+        setFolders([...folders, data]);
+      }
       return data;
     } catch (error) {
       console.error('Error creating folder:', error);
@@ -252,14 +171,7 @@ export function MindMapProvider({ children }: { children: ReactNode }) {
   // Update a folder
   const updateFolder = async (id: string, name: string, description?: string) => {
     try {
-      const { error } = await supabase
-        .from('mind_map_folders')
-        .update({
-          name,
-          description: description || '',
-        })
-        .eq('id', id)
-        .eq('user_id', user?.id);
+      const { error } = await mindMapService.updateFolder(id, name, description);
 
       if (error) throw error;
 
@@ -286,21 +198,7 @@ export function MindMapProvider({ children }: { children: ReactNode }) {
   // Delete a folder
   const deleteFolder = async (id: string) => {
     try {
-      // First update all mind maps in this folder to have no folder
-      const { error: updateError } = await supabase
-        .from('mind_maps')
-        .update({ folder_id: null })
-        .eq('folder_id', id)
-        .eq('user_id', user?.id);
-
-      if (updateError) throw updateError;
-
-      // Then delete the folder
-      const { error } = await supabase
-        .from('mind_map_folders')
-        .delete()
-        .eq('id', id)
-        .eq('user_id', user?.id);
+      const { error } = await mindMapService.deleteFolder(id);
 
       if (error) throw error;
 
@@ -331,34 +229,50 @@ export function MindMapProvider({ children }: { children: ReactNode }) {
 
   // Add a tag to a mind map
   const addTagToMindMap = async (mindMapId: string, tag: string) => {
-    const mindMap = getMindMapById(mindMapId);
-    if (!mindMap) return false;
+    try {
+      const mindMap = getMindMapById(mindMapId);
+      if (!mindMap) return false;
 
-    const updatedTags = [...(mindMap.tags || []), tag];
-    return await updateMindMap(
-      mindMapId,
-      mindMap.name,
-      mindMap.description,
-      mindMap.nodes,
-      mindMap.edges,
-      updatedTags
-    );
+      const { error } = await mindMapService.addTagToMindMap(mindMapId, tag);
+      if (error) throw error;
+
+      // Update local state
+      const updatedTags = [...(mindMap.tags || []), tag];
+      setMindMaps(
+        mindMaps.map((map) =>
+          map.id === mindMapId ? { ...map, tags: updatedTags } : map
+        )
+      );
+
+      return true;
+    } catch (error) {
+      console.error('Error adding tag to mind map:', error);
+      return false;
+    }
   };
 
   // Remove a tag from a mind map
   const removeTagFromMindMap = async (mindMapId: string, tag: string) => {
-    const mindMap = getMindMapById(mindMapId);
-    if (!mindMap || !mindMap.tags) return false;
+    try {
+      const mindMap = getMindMapById(mindMapId);
+      if (!mindMap || !mindMap.tags) return false;
 
-    const updatedTags = mindMap.tags.filter((t) => t !== tag);
-    return await updateMindMap(
-      mindMapId,
-      mindMap.name,
-      mindMap.description,
-      mindMap.nodes,
-      mindMap.edges,
-      updatedTags
-    );
+      const { error } = await mindMapService.removeTagFromMindMap(mindMapId, tag);
+      if (error) throw error;
+
+      // Update local state
+      const updatedTags = mindMap.tags.filter((t) => t !== tag);
+      setMindMaps(
+        mindMaps.map((map) =>
+          map.id === mindMapId ? { ...map, tags: updatedTags } : map
+        )
+      );
+
+      return true;
+    } catch (error) {
+      console.error('Error removing tag from mind map:', error);
+      return false;
+    }
   };
 
   // Search mind maps by tag
